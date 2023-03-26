@@ -19,7 +19,7 @@ namespace MassChart
         private GUIStyle labelStyle;
 
         private int windowID = 0;
-        private Rect windowRect = new Rect(10, 10, 400, 300);
+        private Rect windowRect = new Rect(10, 10, 450, 550);
 
         private ApplicationLauncherButton appButton; //
 
@@ -120,7 +120,7 @@ namespace MassChart
                 ConfigureStyles();
             }
 
-            windowRect = GUILayout.Window(windowID, windowRect, DrawWindow, "Vessel Mass 26/05/23 15:48", windowStyle);
+            windowRect = GUILayout.Window(windowID, windowRect, DrawWindow, "Vessel Mass 26/05/23 16:09", windowStyle);
             //windowRect = new Rect(windowRect.x, windowRect.y, Mathf.Max(minWindowSize.x, windowRect.width), Mathf.Max(minWindowSize.y, windowRect.height));
 
 
@@ -128,6 +128,11 @@ namespace MassChart
 
         private void DrawWindow(int id)
         {
+
+            GUIStyle rightAlignedLabelStyle = new GUIStyle(labelStyle);
+            rightAlignedLabelStyle.alignment = TextAnchor.MiddleRight;
+
+
             GUILayout.BeginHorizontal();
             if (GUILayout.Button("Sort by Order"))
             {
@@ -161,8 +166,8 @@ namespace MassChart
             GUILayout.EndHorizontal();
 
             GUILayout.Label("Total Vessel Mass: " + EditorLogic.fetch.ship.GetTotalMass().ToString("F2") + " tons", labelStyle);
-
-            scrollPosition = GUILayout.BeginScrollView(scrollPosition, GUILayout.Width(380), GUILayout.Height(200));
+            
+            scrollPosition = GUILayout.BeginScrollView(scrollPosition, GUILayout.Width(430), GUILayout.Height(450));
 
             List<Part> sortedParts = EditorLogic.fetch.ship.Parts.OrderBy(p => p.transform.position.y).Reverse().ToList();
 
@@ -195,7 +200,10 @@ namespace MassChart
                     int partCount = kvp.Value.Count;
                     float partMassPercentage = (partMass / EditorLogic.fetch.ship.GetTotalMass()) * 100;
 
-                    GUILayout.Label($"{partName} ({partCount}): {partMass.ToString("F2")} tons ({partMassPercentage.ToString("F2")}%)", labelStyle);
+                    GUILayout.BeginHorizontal();
+                    GUILayout.Label($"{partName} ({partCount})", labelStyle, GUILayout.ExpandWidth(true));
+                    GUILayout.Label($"{partMass.ToString("F2")} tons ({partMassPercentage.ToString("F2")}%)", rightAlignedLabelStyle, GUILayout.Width(150));
+                    GUILayout.EndHorizontal();
                 }
             }
             else
@@ -218,7 +226,10 @@ namespace MassChart
                     float partMass = p.mass + p.GetResourceMass();
                     float partMassPercentage = (partMass / EditorLogic.fetch.ship.GetTotalMass()) * 100;
 
-                    GUILayout.Label($"{indexedPartName}: {partMass.ToString("F2")} tons ({partMassPercentage.ToString("F2")}%)", labelStyle);
+                    GUILayout.BeginHorizontal();
+                    GUILayout.Label(indexedPartName, labelStyle, GUILayout.ExpandWidth(true));
+                    GUILayout.Label($"{partMass.ToString("F2")} tons ({partMassPercentage.ToString("F2")}%)", rightAlignedLabelStyle, GUILayout.Width(150));
+                    GUILayout.EndHorizontal();
                 }
             }
 
