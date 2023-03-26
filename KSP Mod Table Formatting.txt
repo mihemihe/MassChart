@@ -1,0 +1,188 @@
+KSP Mod: Table Formatting
+_________________________
+
+Human: This is the drawin method of a KSP mod. It works fine, but the text format is not great. I would like to align to right the mass values, and keep the names on the left. Kind if a table. "       private void DrawWindow(int id)
+        {
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Sort by Order"))
+            {
+                if (currentSortMode == SortMode.Order)
+                {
+                    isSortDescending = !isSortDescending;
+                }
+                else
+                {
+                    isSortDescending = true;
+                }
+                currentSortMode = SortMode.Order;
+            }
+
+            if (GUILayout.Button("Sort by Mass"))
+            {
+                if (currentSortMode == SortMode.Mass)
+                {
+                    isSortDescending = !isSortDescending;
+                }
+                else
+                {
+                    isSortDescending = true;
+                }
+                currentSortMode = SortMode.Mass;
+            }
+            if (GUILayout.Button("Aggregate"))
+            {
+                currentSortMode = SortMode.Aggregate;
+            }
+            GUILayout.EndHorizontal();
+
+            GUILayout.Label("Total Vessel Mass: " + EditorLogic.fetch.ship.GetTotalMass().ToString("F2") + " tons", labelStyle);
+
+            scrollPosition = GUILayout.BeginScrollView(scrollPosition, GUILayout.Width(380), GUILayout.Height(200));
+
+            List<Part> sortedParts = EditorLogic.fetch.ship.Parts.OrderBy(p => p.transform.position.y).Reverse().ToList();
+
+            if (currentSortMode == SortMode.Order)
+            {
+                if (isSortDescending)
+                {
+                    sortedParts = EditorLogic.fetch.ship.Parts.OrderByDescending(p => p.transform.position.y).ToList();
+                }
+                else
+                {
+                    sortedParts = EditorLogic.fetch.ship.Parts.OrderBy(p => p.transform.position.y).ToList();
+                }
+            }
+
+
+            if (currentSortMode == SortMode.Mass)
+            {
+                SortPartsByMass(ref sortedParts);
+            }
+
+            if (currentSortMode == SortMode.Aggregate)
+            {
+                Dictionary<string, (float Mass, int Count)> aggregatedParts = AggregatePartsByCategory(sortedParts);
+
+                foreach (KeyValuePair<string, (float Mass, int Count)> kvp in aggregatedParts)
+                {
+                    string partName = kvp.Key;
+                    float partMass = kvp.Value.Mass;
+                    int partCount = kvp.Value.Count;
+                    float partMassPercentage = (partMass / EditorLogic.fetch.ship.GetTotalMass()) * 100;
+
+                    GUILayout.Label($"{partName} ({partCount}): {partMass.ToString("F2")} tons ({partMassPercentage.ToString("F2")}%)", labelStyle);
+                }
+            }
+            else
+            {
+                Dictionary<string, int> partCounts = new Dictionary<string, int>();
+
+                foreach (Part p in sortedParts)
+                {
+                    string partName = p.partInfo.title;
+                    if (!partCounts.ContainsKey(partName))
+                    {
+                        partCounts[partName] = 1;
+                    }
+                    else
+                    {
+                        partCounts[partName]++;
+                    }
+
+                    string indexedPartName = partName + " #" + partCounts[partName];
+                    float partMass = p.mass + p.GetResourceMass();
+                    float partMassPercentage = (partMass / EditorLogic.fetch.ship.GetTotalMass()) * 100;
+
+                    GUILayout.Label($"{indexedPartName}: {partMass.ToString("F2")} tons ({partMassPercentage.ToString("F2")}%)", labelStyle);
+                }
+            }
+
+            GUILayout.EndScrollView();
+            GUI.DragWindow();
+
+
+        }"
+ChatGPT: To align the mass values to the right and keep the names on the left, you can use GUILayout.BeginHorizontal() and GUILayout.EndHorizontal() to create a row with two columns. Then, you can set the GUIStyle for the mass values to have right alignment. Here's the modified code:csharpCopy codeprivate void DrawWindow(int id)
+{
+    // ...
+    // Other code remains unchanged
+    // ...
+
+    GUIStyle rightAlignedLabelStyle = new GUIStyle(labelStyle);
+    rightAlignedLabelStyle.alignment = TextAnchor.MiddleRight;
+
+    if (currentSortMode == SortMode.Aggregate)
+    {
+        // ...
+        // The code for Aggregate mode remains unchanged
+        // ...
+    }
+    else
+    {
+        Dictionary<string, int> partCounts = new Dictionary<string, int>();
+
+        foreach (Part p in sortedParts)
+        {
+            string partName = p.partInfo.title;
+            if (!partCounts.ContainsKey(partName))
+            {
+                partCounts[partName] = 1;
+            }
+            else
+            {
+                partCounts[partName]++;
+            }
+
+            string indexedPartName = partName + " #" + partCounts[partName];
+            float partMass = p.mass + p.GetResourceMass();
+            float partMassPercentage = (partMass / EditorLogic.fetch.ship.GetTotalMass()) * 100;
+
+            GUILayout.BeginHorizontal();
+            GUILayout.Label(indexedPartName, labelStyle, GUILayout.ExpandWidth(true));
+            GUILayout.Label($"{partMass.ToString("F2")} tons ({partMassPercentage.ToString("F2")}%)", rightAlignedLabelStyle, GUILayout.Width(150));
+            GUILayout.EndHorizontal();
+        }
+    }
+
+    GUILayout.EndScrollView();
+    GUI.DragWindow();
+}
+This code modification will display the part names on the left column and the mass values aligned to the right in the second column. Note the use of GUILayout.Width(150) to set a fixed width for the second column containing mass values; you can adjust this value as needed for better alignment.
+Human: it works great, but it does not same table style on the "aggregate" button? can you do it ?
+ChatGPT: Certainly! You can apply the same table-style formatting to the "Aggregate" mode by adding GUILayout.BeginHorizontal() and GUILayout.EndHorizontal() to create rows with two columns in that section as well. Here's the modified code for the "Aggregate" mode:csharpCopy codeprivate void DrawWindow(int id)
+{
+    // ...
+    // Other code remains unchanged
+    // ...
+
+    GUIStyle rightAlignedLabelStyle = new GUIStyle(labelStyle);
+    rightAlignedLabelStyle.alignment = TextAnchor.MiddleRight;
+
+    if (currentSortMode == SortMode.Aggregate)
+    {
+        Dictionary<string, (float Mass, int Count)> aggregatedParts = AggregatePartsByCategory(sortedParts);
+
+        foreach (KeyValuePair<string, (float Mass, int Count)> kvp in aggregatedParts)
+        {
+            string partName = kvp.Key;
+            float partMass = kvp.Value.Mass;
+            int partCount = kvp.Value.Count;
+            float partMassPercentage = (partMass / EditorLogic.fetch.ship.GetTotalMass()) * 100;
+
+            GUILayout.BeginHorizontal();
+            GUILayout.Label($"{partName} ({partCount})", labelStyle, GUILayout.ExpandWidth(true));
+            GUILayout.Label($"{partMass.ToString("F2")} tons ({partMassPercentage.ToString("F2")}%)", rightAlignedLabelStyle, GUILayout.Width(150));
+            GUILayout.EndHorizontal();
+        }
+    }
+    else
+    {
+        // ...
+        // The code for non-Aggregate mode remains unchanged
+        // ...
+    }
+
+    GUILayout.EndScrollView();
+    GUI.DragWindow();
+}
+This code modification will display the part names with counts on the left column and the mass values aligned to the right in the second column for the "Aggregate" mode as well. The second column's width is set with GUILayout.Width(150), which you can adjust for better alignment if needed.

@@ -1,0 +1,568 @@
+KSP Mod Icon Duplication.
+_________________________
+
+Human: I have this KSP mod. Every time I use a simulation of KCT the icon in the toolbar gets duplicated. I would need to fix that. "using KSP.UI.Screens;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using UnityEngine;
+using KSP.UI;
+using KSP.Localization;
+using System.Reflection;
+
+namespace MassChart
+{
+    [KSPAddon(KSPAddon.Startup.EditorAny, false)]
+    public class MassChart : MonoBehaviour
+    {
+        private Vector2 scrollPosition;
+        private bool windowVisible;
+        private bool stylesConfigured;
+        private GUIStyle windowStyle;
+        private GUIStyle labelStyle;
+
+        private int windowID = 0;
+        private Rect windowRect = new Rect(10, 10, 400, 300);
+
+        private void Start()
+        {
+            GameEvents.onGUIApplicationLauncherReady.Add(OnGUIApplicationLauncherReady);
+            GameEvents.onGUIApplicationLauncherDestroyed.Add(OnGUIApplicationLauncherDestroyed);
+        }
+
+        private void OnGUIApplicationLauncherReady()
+        {
+            ApplicationLauncher.Instance.AddModApplication(ShowWindow, HideWindow, null, null, null, null, ApplicationLauncher.AppScenes.VAB | ApplicationLauncher.AppScenes.SPH, GetIcon());
+        }
+
+        private void OnGUIApplicationLauncherDestroyed()
+        {
+            if (windowVisible) HideWindow();
+        }
+
+        private void ShowWindow()
+        {
+            windowVisible = true;
+        }
+
+        private void HideWindow()
+        {
+            windowVisible = false;
+        }
+
+        private void OnGUI()
+        {
+            if (!windowVisible) return;
+
+            if (!stylesConfigured)
+            {
+                ConfigureStyles();
+            }
+
+            windowRect = GUILayout.Window(windowID, windowRect, DrawWindow, "Vessel Mass", windowStyle);
+        }
+
+        private void DrawWindow(int id)
+        {
+            GUILayout.Label("Total Vessel Mass: " + EditorLogic.fetch.ship.GetTotalMass().ToString("F2") + " tons", labelStyle);
+
+            scrollPosition = GUILayout.BeginScrollView(scrollPosition, GUILayout.Width(380), GUILayout.Height(200));
+            Dictionary<string, int> partCounts = new Dictionary<string, int>();
+
+            List<Part> sortedParts = EditorLogic.fetch.ship.Parts.OrderBy(p => p.transform.position.y).Reverse().ToList();
+
+            foreach (Part p in sortedParts)
+            {
+                string partName = p.partInfo.title;
+                if (!partCounts.ContainsKey(partName))
+                {
+                    partCounts[partName] = 1;
+                }
+                else
+                {
+                    partCounts[partName]++;
+                }
+
+                string indexedPartName = partName + " #" + partCounts[partName];
+                float partMass = p.mass + p.GetResourceMass();
+                float partMassPercentage = (partMass / EditorLogic.fetch.ship.GetTotalMass()) * 100;
+
+                GUILayout.Label($"{indexedPartName}: {partMass.ToString("F2")} tons ({partMassPercentage.ToString("F2")}%)", labelStyle);
+            }
+
+            GUILayout.EndScrollView();
+            GUI.DragWindow();
+        }
+
+        private void ConfigureStyles()
+        {
+            windowStyle = new GUIStyle(HighLogic.Skin.window)
+            {
+                padding = new RectOffset(10, 10, 25, 10),
+                fontSize = 12
+            };
+
+            labelStyle = new GUIStyle(HighLogic.Skin.label)
+            {
+                fontSize = 12
+            };
+
+            stylesConfigured = true;
+        }
+
+        private Texture2D GetIcon()
+        {
+            string iconPath = "MassChart/Textures/toolbar_icon";
+            return GameDatabase.Instance.GetTexture(iconPath, false);
+        }
+
+        private void OnDestroy()
+        {
+            GameEvents.onGUIApplicationLauncherReady.Remove(OnGUIApplicationLauncherReady);
+            GameEvents.onGUIApplicationLauncherDestroyed.Remove(OnGUIApplicationLauncherDestroyed);
+        }
+    }
+
+}"
+ChatGPT: It appears that the issue of duplicated icons in the toolbar is caused by the mod not properly handling the removal of its icon when the mod window is closed or when the game switches scenes. To fix this issue, you need to add a method to remove the icon from the toolbar when necessary and properly manage the mod application button.Update your MassChart class with the following changes:Add a new private field to store the reference to the mod's application button:csharpCopy codeprivate ApplicationLauncherButton appButton;
+Modify the OnGUIApplicationLauncherReady() method to set the appButton field and properly handle the button when it's already created:csharpCopy codeprivate void OnGUIApplicationLauncherReady()
+{
+    if (appButton == null)
+    {
+        appButton = ApplicationLauncher.Instance.AddModApplication(ShowWindow, HideWindow, null, null, null, null, ApplicationLauncher.AppScenes.VAB | ApplicationLauncher.AppScenes.SPH, GetIcon());
+    }
+}
+Add a new method called RemoveAppButton() to remove the button from the ApplicationLauncher and set the appButton field to null:csharpCopy codeprivate void RemoveAppButton()
+{
+    if (appButton != null)
+    {
+        ApplicationLauncher.Instance.RemoveModApplication(appButton);
+        appButton = null;
+    }
+}
+Modify the OnGUIApplicationLauncherDestroyed() method to call RemoveAppButton():csharpCopy codeprivate void OnGUIApplicationLauncherDestroyed()
+{
+    if (windowVisible) HideWindow();
+    RemoveAppButton();
+}
+Finally, update the OnDestroy() method to call RemoveAppButton():csharpCopy codeprivate void OnDestroy()
+{
+    GameEvents.onGUIApplicationLauncherReady.Remove(OnGUIApplicationLauncherReady);
+    GameEvents.onGUIApplicationLauncherDestroyed.Remove(OnGUIApplicationLauncherDestroyed);
+    RemoveAppButton();
+}
+These changes should prevent the duplication of the toolbar icon when using the KCT simulation.
+Human: add three buttons in the dialogs box open in the VAB of this mod, at the top "Sort by Mass" "Sort by Order" "Aggregate". The first one will sort the parts in the list by mass. The second one will sort the list by the order they appear in the rocket from bottom to top (not the order they have been added. The third will aggregate parts from the same category in one value. 
+ChatGPT: To add the three buttons to the dialog box, you can update the DrawWindow() method to include them and implement the required sorting and aggregation functionality.Add the following methods to handle sorting and aggregation:csharpCopy codeprivate enum SortMode
+{
+    Order,
+    Mass,
+    Aggregate
+}
+
+private SortMode currentSortMode = SortMode.Order;
+
+private void SortPartsByMass(ref List<Part> parts)
+{
+    parts.Sort((p1, p2) => (p1.mass + p1.GetResourceMass()).CompareTo(p2.mass + p2.GetResourceMass()));
+}
+
+private Dictionary<string, float> AggregatePartsByCategory(List<Part> parts)
+{
+    Dictionary<string, float> aggregatedParts = new Dictionary<string, float>();
+
+    foreach (Part p in parts)
+    {
+        string partName = p.partInfo.title;
+        float partMass = p.mass + p.GetResourceMass();
+
+        if (aggregatedParts.ContainsKey(partName))
+        {
+            aggregatedParts[partName] += partMass;
+        }
+        else
+        {
+            aggregatedParts[partName] = partMass;
+        }
+    }
+
+    return aggregatedParts;
+}
+Update the DrawWindow() method with the buttons and sorting/aggregation logic:csharpCopy codeprivate void DrawWindow(int id)
+{
+    GUILayout.BeginHorizontal();
+    if (GUILayout.Button("Sort by Order"))
+    {
+        currentSortMode = SortMode.Order;
+    }
+    if (GUILayout.Button("Sort by Mass"))
+    {
+        currentSortMode = SortMode.Mass;
+    }
+    if (GUILayout.Button("Aggregate"))
+    {
+        currentSortMode = SortMode.Aggregate;
+    }
+    GUILayout.EndHorizontal();
+
+    GUILayout.Label("Total Vessel Mass: " + EditorLogic.fetch.ship.GetTotalMass().ToString("F2") + " tons", labelStyle);
+
+    scrollPosition = GUILayout.BeginScrollView(scrollPosition, GUILayout.Width(380), GUILayout.Height(200));
+
+    List<Part> sortedParts = EditorLogic.fetch.ship.Parts.OrderBy(p => p.transform.position.y).Reverse().ToList();
+
+    if (currentSortMode == SortMode.Mass)
+    {
+        SortPartsByMass(ref sortedParts);
+    }
+
+    if (currentSortMode == SortMode.Aggregate)
+    {
+        Dictionary<string, float> aggregatedParts = AggregatePartsByCategory(sortedParts);
+
+        foreach (KeyValuePair<string, float> kvp in aggregatedParts)
+        {
+            string partName = kvp.Key;
+            float partMass = kvp.Value;
+            float partMassPercentage = (partMass / EditorLogic.fetch.ship.GetTotalMass()) * 100;
+
+            GUILayout.Label($"{partName}: {partMass.ToString("F2")} tons ({partMassPercentage.ToString("F2")}%)", labelStyle);
+        }
+    }
+    else
+    {
+        Dictionary<string, int> partCounts = new Dictionary<string, int>();
+
+        foreach (Part p in sortedParts)
+        {
+            string partName = p.partInfo.title;
+            if (!partCounts.ContainsKey(partName))
+            {
+                partCounts[partName] = 1;
+            }
+            else
+            {
+                partCounts[partName]++;
+            }
+
+            string indexedPartName = partName + " #" + partCounts[partName];
+            float partMass = p.mass + p.GetResourceMass();
+            float partMassPercentage = (partMass / EditorLogic.fetch.ship.GetTotalMass()) * 100;
+
+            GUILayout.Label($"{indexedPartName}: {partMass.ToString("F2")} tons ({partMassPercentage.ToString("F2")}%)", labelStyle);
+        }
+    }
+
+    GUILayout.EndScrollView();
+    GUI.DragWindow();
+}
+These updates will add the "Sort by Mass," "Sort by Order," and
+Human: do a quick modification, for both sort buttons. Clicking again will inverse the sorting order (for sort by mass and sort by order buttons) Give me only the changes not the entire code
+ChatGPT: To implement the toggling of sorting order for both buttons, you can introduce a new variable to keep track of the current sorting direction and update the sorting methods accordingly.Add a new field to keep track of the sorting direction:csharpCopy codeprivate bool isSortDescending = true;
+Modify the SortPartsByMass and the sorting by order logic to account for the sorting direction:csharpCopy codeprivate void SortPartsByMass(ref List<Part> parts)
+{
+    if (isSortDescending)
+    {
+        parts.Sort((p1, p2) => (p2.mass + p2.GetResourceMass()).CompareTo(p1.mass + p1.GetResourceMass()));
+    }
+    else
+    {
+        parts.Sort((p1, p2) => (p1.mass + p1.GetResourceMass()).CompareTo(p2.mass + p2.GetResourceMass()));
+    }
+}
+Update the button click handling inside the DrawWindow method:csharpCopy codeif (GUILayout.Button("Sort by Order"))
+{
+    if (currentSortMode == SortMode.Order)
+    {
+        isSortDescending = !isSortDescending;
+    }
+    else
+    {
+        isSortDescending = true;
+    }
+    currentSortMode = SortMode.Order;
+}
+
+if (GUILayout.Button("Sort by Mass"))
+{
+    if (currentSortMode == SortMode.Mass)
+    {
+        isSortDescending = !isSortDescending;
+    }
+    else
+    {
+        isSortDescending = true;
+    }
+    currentSortMode = SortMode.Mass;
+}
+Modify the sorting by order logic inside the DrawWindow method:csharpCopy codeList<Part> sortedParts;
+
+if (isSortDescending)
+{
+    sortedParts = EditorLogic.fetch.ship.Parts.OrderByDescending(p => p.transform.position.y).ToList();
+}
+else
+{
+    sortedParts = EditorLogic.fetch.ship.Parts.OrderBy(p => p.transform.position.y).ToList();
+}
+These changes will allow you to toggle the sorting order for both "Sort by Mass" and "Sort by Order" buttons by clicking them again.
+Human: it works fine for mass, but not for "Order" It does sort inverse when I click on the "sort by order' button again. 
+ChatGPT: Apologies for the confusion. It appears that the order sorting logic was not updated correctly. Here's the correct modification to make the "Sort by Order" button work as intended:Replace the existing sorting by order logic inside the DrawWindow method with the following:csharpCopy codeif (currentSortMode == SortMode.Order)
+{
+    if (isSortDescending)
+    {
+        sortedParts = EditorLogic.fetch.ship.Parts.OrderByDescending(p => p.transform.position.y).ToList();
+    }
+    else
+    {
+        sortedParts = EditorLogic.fetch.ship.Parts.OrderBy(p => p.transform.position.y).ToList();
+    }
+}
+Now, clicking the "Sort by Order" button again will correctly inverse the sorting order.
+Human: I dont know where I have to replace the code above. Give me some hints.
+ChatGPT: Apologies for the confusion. To clarify, you should replace the existing sorting by order logic inside the DrawWindow() method with the provided code snippet. You'll find it under the scrollPosition = GUILayout.BeginScrollView(scrollPosition, GUILayout.Width(380), GUILayout.Height(200)); line.Here is the updated DrawWindow() method with the correct position for the new sorting by order logic:csharpCopy codeprivate void DrawWindow(int id)
+{
+    GUILayout.BeginHorizontal();
+    if (GUILayout.Button("Sort by Order"))
+    {
+        if (currentSortMode == SortMode.Order)
+        {
+            isSortDescending = !isSortDescending;
+        }
+        else
+        {
+            isSortDescending = true;
+        }
+        currentSortMode = SortMode.Order;
+    }
+    if (GUILayout.Button("Sort by Mass"))
+    {
+        if (currentSortMode == SortMode.Mass)
+        {
+            isSortDescending = !isSortDescending;
+        }
+        else
+        {
+            isSortDescending = true;
+        }
+        currentSortMode = SortMode.Mass;
+    }
+    if (GUILayout.Button("Aggregate"))
+    {
+        currentSortMode = SortMode.Aggregate;
+    }
+    GUILayout.EndHorizontal();
+
+    GUILayout.Label("Total Vessel Mass: " + EditorLogic.fetch.ship.GetTotalMass().ToString("F2") + " tons", labelStyle);
+
+    scrollPosition = GUILayout.BeginScrollView(scrollPosition, GUILayout.Width(380), GUILayout.Height(200));
+
+    if (currentSortMode == SortMode.Order)
+    {
+        if (isSortDescending)
+        {
+            sortedParts = EditorLogic.fetch.ship.Parts.OrderByDescending(p => p.transform.position.y).ToList();
+        }
+        else
+        {
+            sortedParts = EditorLogic.fetch.ship.Parts.OrderBy(p => p.transform.position.y).ToList();
+        }
+    }
+    else if (currentSortMode == SortMode.Mass)
+    {
+        SortPartsByMass(ref sortedParts);
+    }
+
+    // Rest of the DrawWindow method code
+}
+With this update, the "Sort by Order" button should work correctly, and clicking it again will inverse the sorting order.
+Human: Everything works fine now. For the Aggregate mode, I need to include the number of parts for each aggregation, for instance, if there are 15 pars of one same type, I need to include in parenthesis the numbers of pars aggregated, like "Part name (#)" where # is the number of parts aggregated. 
+ChatGPT: To include the number of parts for each aggregation in the "Aggregate" mode, you can modify the AggregatePartsByCategory method to return a dictionary with a key-value pair containing both the aggregated mass and the number of parts.Change the return type of AggregatePartsByCategory and modify the method as follows:csharpCopy codeprivate Dictionary<string, (float Mass, int Count)> AggregatePartsByCategory(List<Part> parts)
+{
+    Dictionary<string, (float Mass, int Count)> aggregatedParts = new Dictionary<string, (float Mass, int Count)>();
+
+    foreach (Part p in parts)
+    {
+        string partName = p.partInfo.title;
+        float partMass = p.mass + p.GetResourceMass();
+
+        if (aggregatedParts.ContainsKey(partName))
+        {
+            aggregatedParts[partName] = (aggregatedParts[partName].Mass + partMass, aggregatedParts[partName].Count + 1);
+        }
+        else
+        {
+            aggregatedParts[partName] = (partMass, 1);
+        }
+    }
+
+    return aggregatedParts;
+}
+Update the "Aggregate" mode display logic in the DrawWindow method:csharpCopy codeif (currentSortMode == SortMode.Aggregate)
+{
+    Dictionary<string, (float Mass, int Count)> aggregatedParts = AggregatePartsByCategory(sortedParts);
+
+    foreach (KeyValuePair<string, (float Mass, int Count)> kvp in aggregatedParts)
+    {
+        string partName = kvp.Key;
+        float partMass = kvp.Value.Mass;
+        int partCount = kvp.Value.Count;
+        float partMassPercentage = (partMass / EditorLogic.fetch.ship.GetTotalMass()) * 100;
+
+        GUILayout.Label($"{partName} ({partCount}): {partMass.ToString("F2")} tons ({partMassPercentage.ToString("F2")}%)", labelStyle);
+    }
+}
+Now, the "Aggregate" mode will display the number of parts aggregated in parentheses for each part type.
+Human: is it possible to make the UI window expandable?
+ChatGPT: Yes, it's possible to make the UI window expandable. You can achieve this by adding a resize handle in the bottom-right corner of the window and updating the window size when the user drags this handle.Add two new fields to keep track of the resize handle size and the minimum window size:csharpCopy codeprivate const float ResizeHandleSize = 16f;
+private Vector2 minWindowSize = new Vector2(400, 300);
+Update the OnGUI method to calculate the resize handle rect and pass it to the DrawWindow method:csharpCopy codeprivate void OnGUI()
+{
+    if (!windowVisible) return;
+
+    if (!stylesConfigured)
+    {
+        ConfigureStyles();
+    }
+
+    Rect resizeHandleRect = new Rect(windowRect.width - ResizeHandleSize, windowRect.height - ResizeHandleSize, ResizeHandleSize, ResizeHandleSize);
+    windowRect = GUILayout.Window(windowID, windowRect, (id) => DrawWindow(id, resizeHandleRect), "Vessel Mass", windowStyle);
+}
+Modify the DrawWindow method to include the resize handle and update the window size when the user drags it:csharpCopy codeprivate void DrawWindow(int id, Rect resizeHandleRect)
+{
+    // Existing DrawWindow content
+
+    GUILayout.EndScrollView();
+    GUI.DragWindow();
+
+    // Resize handle
+    Vector2 mousePosition = new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y);
+    if (resizeHandleRect.Contains(mousePosition))
+    {
+        EditorGUIUtility.AddCursorRect(resizeHandleRect, MouseCursor.ResizeUpLeft);
+        if (Event.current.type == EventType.MouseDown && Event.current.button == 0)
+        {
+            resizing = true;
+        }
+    }
+
+    if (resizing)
+    {
+        float newWidth = Mathf.Max(minWindowSize.x, mousePosition.x - windowRect.x);
+        float newHeight = Mathf.Max(minWindowSize.y, mousePosition.y - windowRect.y);
+        windowRect = new Rect(windowRect.x, windowRect.y, newWidth, newHeight);
+    }
+
+    if (Event.current.type == EventType.MouseUp)
+    {
+        resizing = false;
+    }
+}
+Add the resizing field to the class to keep track of the resizing state:csharpCopy codeprivate bool resizing = false;
+Now, your UI window should be expandable, and users can resize it by dragging the bottom-right corner. Note that this implementation assumes you have imported the UnityEditor namespace. If you are using this script in the Unity editor, it should work fine. However, if you plan to build and run the game, you'll need to use an alternative method for displaying the resize cursor.
+Human: Severity	Code	Description	Project	File	Line	Suppression State
+Error	CS0117	'GameEvents.Input' does not contain a definition for 'mousePosition'	MassChart	C:\Users\mihe\source\repos\MassChart\Class1.cs	238	Active
+
+ChatGPT: I apologize for the confusion. My previous response assumed that you were using the Unity Editor API. Since that is not the case, you can use an alternative method to calculate the mouse position using Unity's Input.mousePosition directly.Please replace this line:csharpCopy codeVector2 mousePosition = new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y);
+with:csharpCopy codeVector2 mousePosition = new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y - 20); // Subtracting 20 to adjust for the window title bar
+Now the code should compile without any errors.
+Human: you are still using again mousePosition which does not exist in the context. Remember we are writing a KSP mod, so it inherits from monobehaviour and it should be able to get the mouseposition somehow. Another hint, this is not found either "EditorGUIUtility"
+ChatGPT: I apologize for the confusion. It seems I misunderstood the context of the code. Let's update the solution to work properly with KSP mods.Replace this line:csharpCopy codeVector2 mousePosition = new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y - 20); // Subtracting 20 to adjust for the window title bar
+with:csharpCopy codeVector2 mousePosition = new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y);
+Since EditorGUIUtility is not available in this context, we need to remove the line that uses it:csharpCopy codeEditorGUIUtility.AddCursorRect(resizeHandleRect, MouseCursor.ResizeUpLeft);
+Instead, you can use GUI.DrawTexture to display a custom resize handle image, which you will need to create or find online (e.g., a diagonal arrow image). Once you have the image, you can load it as a texture and use it in your code:Add a new field to the class to store the resize handle texture:csharpCopy codeprivate Texture2D resizeHandleTexture;
+Load the texture in the Start method:csharpCopy codeprivate void Start()
+{
+    // ...
+
+    resizeHandleTexture = LoadResizeHandleTexture();
+}
+
+private Texture2D LoadResizeHandleTexture()
+{
+    string resizeHandleImagePath = "Path/to/your/resize_handle_image";
+    return GameDatabase.Instance.GetTexture(resizeHandleImagePath, false);
+}
+Remember to replace Path/to/your/resize_handle_image with the actual path to your resize handle image file.Finally, draw the resize handle texture in the DrawWindow method:csharpCopy codeGUI.DrawTexture(resizeHandleRect, resizeHandleTexture);
+Now your code should work correctly with the KSP mod and display the custom resize handle. Users can still resize the window by dragging the bottom-right corner.
+Human: ok, the problem for mouseposition and editorguiutiity that you want to use is that they are not in this context, maybe we are missing a reference? or an interface ? Remember this is a KSP mod, so those thing should come somewhere from unity. 
+ChatGPT: You are correct, my previous responses did not take into account the context of KSP mods. You can make the resize handle work without using the unavailable EditorGUIUtility by making the following changes:Remove this line from the DrawWindow method:csharpCopy codeEditorGUIUtility.AddCursorRect(resizeHandleRect, MouseCursor.ResizeUpLeft);
+Add a new field in the class to store the resizing state:csharpCopy codeprivate bool resizing = false;
+Update the DrawWindow method to handle mouse events and change the cursor when hovering over the resize handle:csharpCopy codeprivate void DrawWindow(int id, Rect resizeHandleRect)
+{
+    // Existing DrawWindow content
+
+    GUILayout.EndScrollView();
+    GUI.DragWindow();
+
+    // Handle mouse events for resizing
+    if (resizeHandleRect.Contains(Event.current.mousePosition) && !resizing)
+    {
+        Cursor.SetCursor(resizeCursorTexture, new Vector2(resizeCursorTexture.width / 2, resizeCursorTexture.height / 2), CursorMode.Auto);
+    }
+    else if (!resizing)
+    {
+        Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto);
+    }
+
+    if (Event.current.type == EventType.MouseDown && Event.current.button == 0 && resizeHandleRect.Contains(Event.current.mousePosition))
+    {
+        resizing = true;
+    }
+
+    if (resizing)
+    {
+        float newWidth = Mathf.Max(minWindowSize.x, Input.mousePosition.x - windowRect.x);
+        float newHeight = Mathf.Max(minWindowSize.y, Screen.height - Input.mousePosition.y - windowRect.y);
+        windowRect = new Rect(windowRect.x, windowRect.y, newWidth, newHeight);
+    }
+
+    if (Event.current.type == EventType.MouseUp)
+    {
+        resizing = false;
+        Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto);
+    }
+}
+Now, we need a custom cursor texture to replace the unavailable EditorGUIUtility. You can create or find an image of a diagonal arrow (or any other suitable image for a resize handle) and use it as a custom cursor texture. Once you have the image, you can load it as a texture and use it in your code:Add a new field to the class to store the custom cursor texture:csharpCopy codeprivate Texture2D resizeCursorTexture;
+Load the texture in the Start method:
+Human: I dont like that solution, remember we were preparing our code to use the "simple white arrow texture provided by Unity as a placeholder."
+ChatGPT: Apologies for the confusion. If you would like to use the simple white arrow texture provided by Unity as a placeholder, you can use the following approach:Remove this line from the DrawWindow method:csharpCopy codeEditorGUIUtility.AddCursorRect(resizeHandleRect, MouseCursor.ResizeUpLeft);
+Add a new field in the class to store the resizing state:csharpCopy codeprivate bool resizing = false;
+Update the DrawWindow method to handle mouse events and change the cursor when hovering over the resize handle:csharpCopy codeprivate void DrawWindow(int id, Rect resizeHandleRect)
+{
+    // Existing DrawWindow content
+
+    GUILayout.EndScrollView();
+    GUI.DragWindow();
+
+    // Handle mouse events for resizing
+    if (resizeHandleRect.Contains(Event.current.mousePosition) && !resizing)
+    {
+        Cursor.SetCursor(Texture2D.whiteTexture, new Vector2(0, 0), CursorMode.Auto);
+    }
+    else if (!resizing)
+    {
+        Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto);
+    }
+
+    if (Event.current.type == EventType.MouseDown && Event.current.button == 0 && resizeHandleRect.Contains(Event.current.mousePosition))
+    {
+        resizing = true;
+    }
+
+    if (resizing)
+    {
+        float newWidth = Mathf.Max(minWindowSize.x, Input.mousePosition.x - windowRect.x);
+        float newHeight = Mathf.Max(minWindowSize.y, Screen.height - Input.mousePosition.y - windowRect.y);
+        windowRect = new Rect(windowRect.x, windowRect.y, newWidth, newHeight);
+    }
+
+    if (Event.current.type == EventType.MouseUp)
+    {
+        resizing = false;
+        Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto);
+    }
+}
+This solution uses the simple white texture provided by Unity (Texture2D.whiteTexture) as a placeholder cursor. When the user hovers over the resize handle, the cursor will change to a simple white square. While not as informative as a diagonal arrow, it still provides some visual feedback for the user.

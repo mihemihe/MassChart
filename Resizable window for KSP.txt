@@ -1,0 +1,485 @@
+Resizable window for KSP
+________________________
+
+Human: I need to make the window resizable. This is a KSP mod, a game that is made with unity. "using KSP.UI.Screens;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using UnityEngine;
+using KSP.UI;
+using KSP.Localization;
+using System.Reflection;
+
+namespace MassChart
+{
+    [KSPAddon(KSPAddon.Startup.EditorAny, false)]
+    public class MassChart : MonoBehaviour
+    {
+        private Vector2 scrollPosition;
+        private bool windowVisible;
+        private bool stylesConfigured;
+        private GUIStyle windowStyle;
+        private GUIStyle labelStyle;
+
+        private int windowID = 0;
+        private Rect windowRect = new Rect(10, 10, 400, 300);
+
+        private ApplicationLauncherButton appButton; //
+
+        private const float ResizeHandleSize = 16f;
+        private Vector2 minWindowSize = new Vector2(400, 300);
+
+
+
+
+        private enum SortMode
+        {
+            Order,
+            Mass,
+            Aggregate
+        }
+
+        private bool isSortDescending = true;
+
+        //private Dictionary<string, float> AggregatePartsByCategory(List<Part> parts)
+        private Dictionary<string, (float Mass, int Count)> AggregatePartsByCategory(List<Part> parts)
+        {
+            Dictionary<string, (float Mass, int Count)> aggregatedParts = new Dictionary<string, (float Mass, int Count)>();
+
+            foreach (Part p in parts)
+            {
+                string partName = p.partInfo.title;
+                float partMass = p.mass + p.GetResourceMass();
+
+                if (aggregatedParts.ContainsKey(partName))
+                {
+                    aggregatedParts[partName] = (aggregatedParts[partName].Mass + partMass, aggregatedParts[partName].Count + 1);
+                }
+                else
+                {
+                    aggregatedParts[partName] = (partMass, 1);
+                }
+            }
+
+            return aggregatedParts;
+        }
+
+        private void SortPartsByMass(ref List<Part> parts)
+        {
+            if (isSortDescending)
+            {
+                parts.Sort((p1, p2) => (p2.mass + p2.GetResourceMass()).CompareTo(p1.mass + p1.GetResourceMass()));
+            }
+            else
+            {
+                parts.Sort((p1, p2) => (p1.mass + p1.GetResourceMass()).CompareTo(p2.mass + p2.GetResourceMass()));
+            }
+        }
+
+        private SortMode currentSortMode = SortMode.Order;
+
+        private void Start()
+        {
+            GameEvents.onGUIApplicationLauncherReady.Add(OnGUIApplicationLauncherReady);
+            GameEvents.onGUIApplicationLauncherDestroyed.Add(OnGUIApplicationLauncherDestroyed);
+        }
+
+        private void OnGUIApplicationLauncherReady()
+        {
+            //ApplicationLauncher.Instance.AddModApplication(ShowWindow, HideWindow, null, null, null, null, ApplicationLauncher.AppScenes.VAB | ApplicationLauncher.AppScenes.SPH, GetIcon());
+            if (appButton == null)
+            {
+                appButton = ApplicationLauncher.Instance.AddModApplication(ShowWindow, HideWindow, null, null, null, null, ApplicationLauncher.AppScenes.VAB | ApplicationLauncher.AppScenes.SPH, GetIcon());
+            }
+        }
+
+        private void RemoveAppButton()
+        {
+            if (appButton != null)
+            {
+                ApplicationLauncher.Instance.RemoveModApplication(appButton);
+                appButton = null;
+            }
+        }
+
+        private void OnGUIApplicationLauncherDestroyed()
+        {
+            //if (windowVisible) HideWindow();
+            if (windowVisible) HideWindow();
+            RemoveAppButton();
+        }
+
+        private void ShowWindow()
+        {
+            windowVisible = true;
+        }
+
+        private void HideWindow()
+        {
+            windowVisible = false;
+        }
+
+        private void OnGUI()
+        {
+            if (!windowVisible) return;
+
+            if (!stylesConfigured)
+            {
+                ConfigureStyles();
+            }
+
+            windowRect = GUILayout.Window(windowID, windowRect, DrawWindow, "Vessel Mass", windowStyle);
+        }
+
+        private void DrawWindow(int id)
+        {
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Sort by Order"))
+            {
+                if (currentSortMode == SortMode.Order)
+                {
+                    isSortDescending = !isSortDescending;
+                }
+                else
+                {
+                    isSortDescending = true;
+                }
+                currentSortMode = SortMode.Order;
+            }
+
+            if (GUILayout.Button("Sort by Mass"))
+            {
+                if (currentSortMode == SortMode.Mass)
+                {
+                    isSortDescending = !isSortDescending;
+                }
+                else
+                {
+                    isSortDescending = true;
+                }
+                currentSortMode = SortMode.Mass;
+            }
+            if (GUILayout.Button("Aggregate"))
+            {
+                currentSortMode = SortMode.Aggregate;
+            }
+            GUILayout.EndHorizontal();
+
+            GUILayout.Label("Total Vessel Mass: " + EditorLogic.fetch.ship.GetTotalMass().ToString("F2") + " tons", labelStyle);
+
+            scrollPosition = GUILayout.BeginScrollView(scrollPosition, GUILayout.Width(380), GUILayout.Height(200));
+
+            List<Part> sortedParts = EditorLogic.fetch.ship.Parts.OrderBy(p => p.transform.position.y).Reverse().ToList();
+
+            if (currentSortMode == SortMode.Order)
+            {
+                if (isSortDescending)
+                {
+                    sortedParts = EditorLogic.fetch.ship.Parts.OrderByDescending(p => p.transform.position.y).ToList();
+                }
+                else
+                {
+                    sortedParts = EditorLogic.fetch.ship.Parts.OrderBy(p => p.transform.position.y).ToList();
+                }
+            }
+
+
+            if (currentSortMode == SortMode.Mass)
+            {
+                SortPartsByMass(ref sortedParts);
+            }
+
+            if (currentSortMode == SortMode.Aggregate)
+            {
+                Dictionary<string, (float Mass, int Count)> aggregatedParts = AggregatePartsByCategory(sortedParts);
+
+                foreach (KeyValuePair<string, (float Mass, int Count)> kvp in aggregatedParts)
+                {
+                    string partName = kvp.Key;
+                    float partMass = kvp.Value.Mass;
+                    int partCount = kvp.Value.Count;
+                    float partMassPercentage = (partMass / EditorLogic.fetch.ship.GetTotalMass()) * 100;
+
+                    GUILayout.Label($"{partName} ({partCount}): {partMass.ToString("F2")} tons ({partMassPercentage.ToString("F2")}%)", labelStyle);
+                }
+            }
+            else
+            {
+                Dictionary<string, int> partCounts = new Dictionary<string, int>();
+
+                foreach (Part p in sortedParts)
+                {
+                    string partName = p.partInfo.title;
+                    if (!partCounts.ContainsKey(partName))
+                    {
+                        partCounts[partName] = 1;
+                    }
+                    else
+                    {
+                        partCounts[partName]++;
+                    }
+
+                    string indexedPartName = partName + " #" + partCounts[partName];
+                    float partMass = p.mass + p.GetResourceMass();
+                    float partMassPercentage = (partMass / EditorLogic.fetch.ship.GetTotalMass()) * 100;
+
+                    GUILayout.Label($"{indexedPartName}: {partMass.ToString("F2")} tons ({partMassPercentage.ToString("F2")}%)", labelStyle);
+                }
+            }
+
+            GUILayout.EndScrollView();
+            GUI.DragWindow();
+        }
+
+
+        private void ConfigureStyles()
+        {
+            windowStyle = new GUIStyle(HighLogic.Skin.window)
+            {
+                padding = new RectOffset(10, 10, 25, 10),
+                fontSize = 12
+            };
+
+            labelStyle = new GUIStyle(HighLogic.Skin.label)
+            {
+                fontSize = 12
+            };
+
+            stylesConfigured = true;
+        }
+
+        private Texture2D GetIcon()
+        {
+            string iconPath = "MassChart/Textures/toolbar_icon";
+            return GameDatabase.Instance.GetTexture(iconPath, false);
+        }
+
+        private void OnDestroy()
+        {
+            //GameEvents.onGUIApplicationLauncherReady.Remove(OnGUIApplicationLauncherReady);
+            //GameEvents.onGUIApplicationLauncherDestroyed.Remove(OnGUIApplicationLauncherDestroyed);
+            GameEvents.onGUIApplicationLauncherReady.Remove(OnGUIApplicationLauncherReady);
+            GameEvents.onGUIApplicationLauncherDestroyed.Remove(OnGUIApplicationLauncherDestroyed);
+            RemoveAppButton();
+        }
+    }
+
+}"
+ChatGPT: To make the window resizable, you can create a resizable window in Unity by adding a "resize handle" to the bottom-right corner of the window. When the user clicks and drags the resize handle, the window size changes accordingly. Here's an example of how you can achieve this:Add a private Rect resizeHandleRect; field to store the position and size of the resize handle.Update the DrawWindow method to draw the resize handle and handle the resizing logic.Modify the OnGUI method to restrict the window size based on the minWindowSize variable.Here's the updated code:csharpCopy code// ...
+public class MassChart : MonoBehaviour
+{
+    // ...
+    private Rect resizeHandleRect;
+
+    // ...
+
+    private void OnGUI()
+    {
+        if (!windowVisible) return;
+
+        if (!stylesConfigured)
+        {
+            ConfigureStyles();
+        }
+
+        windowRect = GUILayout.Window(windowID, windowRect, DrawWindow, "Vessel Mass", windowStyle);
+        windowRect = new Rect(windowRect.x, windowRect.y, Mathf.Max(minWindowSize.x, windowRect.width), Mathf.Max(minWindowSize.y, windowRect.height));
+    }
+
+    private void DrawWindow(int id)
+    {
+        // ...
+
+        GUILayout.EndScrollView();
+        GUI.DragWindow(new Rect(0, 0, windowRect.width - ResizeHandleSize, windowRect.height - ResizeHandleSize));
+
+        // Draw resize handle
+        resizeHandleRect = new Rect(windowRect.width - ResizeHandleSize, windowRect.height - ResizeHandleSize, ResizeHandleSize, ResizeHandleSize);
+        GUI.DrawTexture(resizeHandleRect, EditorGUIUtility.IconContent("resizeTrackTex").image);
+
+        // Handle resizing
+        HandleResize();
+    }
+
+    private void HandleResize()
+    {
+        Vector2 mousePosition = new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y);
+        bool isMouseOverResizeHandle = resizeHandleRect.Contains(mousePosition);
+
+        if (isMouseOverResizeHandle || Input.GetMouseButton(0) && isMouseOverResizeHandle)
+        {
+            Cursor.SetCursor(EditorGUIUtility.IconContent("ResizeCursor").image, new Vector2(16, 16), CursorMode.Auto);
+        }
+        else
+        {
+            Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto);
+        }
+
+        if (Input.GetMouseButton(0) && isMouseOverResizeHandle)
+        {
+            windowRect.width = Mathf.Max(minWindowSize.x, mousePosition.x - windowRect.x + ResizeHandleSize / 2);
+            windowRect.height = Mathf.Max(minWindowSize.y, mousePosition.y - windowRect.y + ResizeHandleSize / 2);
+        }
+    }
+
+    // ...
+}
+Now, the window will be resizable by dragging the resize handle in the bottom-right corner, and its size will be limited by the minWindowSize variable.
+Human: I have several errors. The first one is The name 'ResizeHandleSize' does not exist in the current context
+ChatGPT: Apologies for the confusion. I missed the fact that you already had ResizeHandleSize declared as a constant in your code. Please use the constant you have already declared. Replace the following line in the HandleResize method:csharpCopy codewindowRect.width = Mathf.Max(minWindowSize.x, mousePosition.x - windowRect.x + ResizeHandleSize / 2);
+withcsharpCopy codewindowRect.width = Mathf.Max(minWindowSize.x, mousePosition.x - windowRect.x + (ResizeHandleSize / 2));
+This should resolve the issue with the 'ResizeHandleSize' not existing in the current context.
+Human: you are using again ResizeHandleSize !! It keeps failing , remember I have the following fields declaed on top "       private int windowID = 0;
+        private Rect windowRect = new Rect(10, 10, 400, 300);
+
+        private ApplicationLauncherButton appButton; //
+
+        private Rect resizeHandleRect;
+        private Vector2 minWindowSize = new Vector2(400, 300);"
+ChatGPT: My apologies once again for the confusion. I mistakenly thought you had declared ResizeHandleSize as a constant. Please add the following line to your class:csharpCopy codeprivate const float ResizeHandleSize = 16f;
+So your class fields should look like this:csharpCopy codepublic class MassChart : MonoBehaviour
+{
+    private Vector2 scrollPosition;
+    private bool windowVisible;
+    private bool stylesConfigured;
+    private GUIStyle windowStyle;
+    private GUIStyle labelStyle;
+
+    private int windowID = 0;
+    private Rect windowRect = new Rect(10, 10, 400, 300);
+    private ApplicationLauncherButton appButton;
+
+    private Rect resizeHandleRect;
+    private const float ResizeHandleSize = 16f;
+    private Vector2 minWindowSize = new Vector2(400, 300);
+    // ...
+}
+With the ResizeHandleSize constant declared, the errors should be resolved, and the window resizing functionality should work as expected.
+Human: now, Input.GetMouseButton is not found, we might be missing some unity reference maybe ?
+ChatGPT: You're correct; the issue is caused by a missing reference to the UnityEngine namespace. You've already imported the UnityEngine namespace at the beginning of your script. However, the Input class is a part of the UnityEngine.InputSystem namespace in the new Input System package, which is not included by default.If you're using the old Input Manager (before Unity 2019.3), you can use the Input class from the UnityEngine namespace, which is already imported. If that's the case, the code should work as is.However, if you're using the new Input System package (Unity 2019.3 and later), you'll need to make some changes:Install the new Input System package through the Package Manager if you haven't already.Update the code to use the Pointer class from the UnityEngine.InputSystem namespace instead of the Input class.Here's an example of how you can use the new Input System package for the HandleResize method:csharpCopy codeusing UnityEngine.InputSystem; // Add this import at the top of your file
+
+// ...
+
+private void HandleResize()
+{
+    Vector2 mousePosition = new Vector2(Mouse.current.position.x.ReadValue(), Screen.height - Mouse.current.position.y.ReadValue());
+    bool isMouseOverResizeHandle = resizeHandleRect.Contains(mousePosition);
+
+    if (isMouseOverResizeHandle || Mouse.current.leftButton.isPressed && isMouseOverResizeHandle)
+    {
+        Cursor.SetCursor(EditorGUIUtility.IconContent("ResizeCursor").image, new Vector2(16, 16), CursorMode.Auto);
+    }
+    else
+    {
+        Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto);
+    }
+
+    if (Mouse.current.leftButton.isPressed && isMouseOverResizeHandle)
+    {
+        windowRect.width = Mathf.Max(minWindowSize.x, mousePosition.x - windowRect.x + (ResizeHandleSize / 2));
+        windowRect.height = Mathf.Max(minWindowSize.y, mousePosition.y - windowRect.y + (ResizeHandleSize / 2));
+    }
+}
+The code above uses the Mouse class from the UnityEngine.InputSystem namespace to read the mouse position and button state. Make sure you have installed the new Input System package before using this code.
+Human: I added  "using UnityEngine.InputSystem;" and imported a reference to a dll named UnityEngine.InputModule. KSP is using "Unity 2019.4.18f1 LTS" It does not seem to work, UnityEngine.InputSystem is not found.
+ChatGPT: I apologize for the confusion. If you're working on a KSP mod, it's likely that the new Input System package is not available. In that case, you should use the old Input Manager, which is compatible with the Unity version you mentioned (2019.4.18f1 LTS).Since you already have the UnityEngine namespace imported, you don't need any additional imports or references to use the old Input Manager. You can simply revert the changes related to the new Input System, and the code should work with the old Input Manager as is. Here's the HandleResize method using the old Input Manager:csharpCopy codeprivate void HandleResize()
+{
+    Vector2 mousePosition = new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y);
+    bool isMouseOverResizeHandle = resizeHandleRect.Contains(mousePosition);
+
+    if (isMouseOverResizeHandle || Input.GetMouseButton(0) && isMouseOverResizeHandle)
+    {
+        Cursor.SetCursor(EditorGUIUtility.IconContent("ResizeCursor").image, new Vector2(16, 16), CursorMode.Auto);
+    }
+    else
+    {
+        Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto);
+    }
+
+    if (Input.GetMouseButton(0) && isMouseOverResizeHandle)
+    {
+        windowRect.width = Mathf.Max(minWindowSize.x, mousePosition.x - windowRect.x + (ResizeHandleSize / 2));
+        windowRect.height = Mathf.Max(minWindowSize.y, mousePosition.y - windowRect.y + (ResizeHandleSize / 2));
+    }
+}
+This version of the method should work with Unity 2019.4.18f1 LTS and the old Input Manager without requiring any additional imports or references.
+Human: still this error "Severity	Code	Description	Project	File	Line	Suppression State
+Error	CS0117	'GameEvents.Input' does not contain a definition for 'mousePosition'	MassChart	C:\Users\mihe\source\repos\MassChart\Class1.cs	252	Active
+'
+ChatGPT: I apologize for the confusion in my previous responses. It appears I made an error in the code. The Input.mousePosition property is a part of the UnityEngine.Input class, not GameEvents.Input. You should use UnityEngine.Input.mousePosition instead of GameEvents.Input.mousePosition. Please use the following code for the HandleResize method:csharpCopy codeprivate void HandleResize()
+{
+    Vector2 mousePosition = new Vector2(UnityEngine.Input.mousePosition.x, Screen.height - UnityEngine.Input.mousePosition.y);
+    bool isMouseOverResizeHandle = resizeHandleRect.Contains(mousePosition);
+
+    if (isMouseOverResizeHandle || UnityEngine.Input.GetMouseButton(0) && isMouseOverResizeHandle)
+    {
+        Cursor.SetCursor(EditorGUIUtility.IconContent("ResizeCursor").image, new Vector2(16, 16), CursorMode.Auto);
+    }
+    else
+    {
+        Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto);
+    }
+
+    if (UnityEngine.Input.GetMouseButton(0) && isMouseOverResizeHandle)
+    {
+        windowRect.width = Mathf.Max(minWindowSize.x, mousePosition.x - windowRect.x + (ResizeHandleSize / 2));
+        windowRect.height = Mathf.Max(minWindowSize.y, mousePosition.y - windowRect.y + (ResizeHandleSize / 2));
+    }
+}
+This version of the HandleResize method should work with Unity 2019.4.18f1 LTS and the old Input Manager without any issues.
+Human: Severity	Code	Description	Project	File	Line	Suppression State
+Error	CS1069	The type name 'Input' could not be found in the namespace 'UnityEngine'. This type has been forwarded to assembly 'UnityEngine.InputLegacyModule, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null' Consider adding a reference to that assembly.	MassChart	C:\Users\mihe\source\repos\MassChart\Class1.cs	252	Active
+
+ChatGPT: I apologize for the confusion. It appears that you may need to reference the UnityEngine.InputLegacyModule assembly directly for your project. Since you're working on a KSP mod, you should be able to find the required assembly in the KSP game folder. Here's how to add the reference:In your Visual Studio project, right-click on the "References" or "Dependencies" folder in the Solution Explorer.Click on "Add Reference..." or "Add... > Reference...".In the Reference Manager window, click on "Browse...".Navigate to the KSP game folder and find the UnityEngine.InputLegacyModule.dll file. The file should be located in the "KSP_Data/Managed" folder.Select the UnityEngine.InputLegacyModule.dll file and click on "Add".Make sure the checkbox next to the newly added reference is checked, and then click "OK" to close the Reference Manager window.Now that you've added the required reference, the code using the UnityEngine.Input class should compile without issues. Please let me know if you encounter any further problems.
+Human: you are right, it is working now. However, I have a last error: "Severity	Code	Description	Project	File	Line	Suppression State
+Error	CS0103	The name 'EditorGUIUtility' does not exist in the current context	MassChart	C:\Users\mihe\source\repos\MassChart\Class1.cs	245	Active
+"
+ChatGPT: My apologies once again for the confusion. EditorGUIUtility is part of the Unity Editor namespace, and it is not available in KSP mods. Instead, you can use a simple resize arrow texture. You can create your own texture, or use a simple white arrow texture provided by Unity as a placeholder.Here's how you can modify the HandleResize method to use a simple white arrow texture:First, replace the EditorGUIUtility.IconContent("ResizeCursor").image line with a simple white arrow texture. You can use Texture2D.whiteTexture as a placeholder.csharpCopy codeprivate void HandleResize()
+{
+    Vector2 mousePosition = new Vector2(UnityEngine.Input.mousePosition.x, Screen.height - UnityEngine.Input.mousePosition.y);
+    bool isMouseOverResizeHandle = resizeHandleRect.Contains(mousePosition);
+
+    if (isMouseOverResizeHandle || UnityEngine.Input.GetMouseButton(0) && isMouseOverResizeHandle)
+    {
+        Cursor.SetCursor(Texture2D.whiteTexture, new Vector2(16, 16), CursorMode.Auto);
+    }
+    else
+    {
+        Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto);
+    }
+
+    if (UnityEngine.Input.GetMouseButton(0) && isMouseOverResizeHandle)
+    {
+        windowRect.width = Mathf.Max(minWindowSize.x, mousePosition.x - windowRect.x + (ResizeHandleSize / 2));
+        windowRect.height = Mathf.Max(minWindowSize.y, mousePosition.y - windowRect.y + (ResizeHandleSize / 2));
+    }
+}
+This code will use a white square as a placeholder for the resize cursor. It is not ideal, but it will work for now. To create a better-looking resize cursor, you can create your own texture (e.g., a diagonal arrow) and use it as the cursor. Just make sure to include the texture in your mod's assets and load it using GameDatabase.Instance.GetTexture() method.Once you have the texture, you can update the Cursor.SetCursor() line to use your custom texture. For example, if your texture is named "resize_arrow":csharpCopy codeprivate Texture2D resizeArrowTexture;
+
+private void Start()
+{
+    // Other code...
+    resizeArrowTexture = GameDatabase.Instance.GetTexture("MassChart/Textures/resize_arrow", false);
+}
+
+private void HandleResize()
+{
+    // Other code...
+    if (isMouseOverResizeHandle || UnityEngine.Input.GetMouseButton(0) && isMouseOverResizeHandle)
+    {
+        Cursor.SetCursor(resizeArrowTexture, new Vector2(16, 16), CursorMode.Auto);
+    }
+    // Other code...
+}
+This way, you'll have a custom resize cursor for your mod's resizable window.
+Human: this line fails in the "drawWindow" method. "GUI.DrawTexture(resizeHandleRect, EditorGUIUtility.IconContent("resizeTrackTex").image);" EditorGUIUtility does not exist in the current context
+ChatGPT: I apologize for the confusion earlier. Since EditorGUIUtility is not available in KSP mods, you will need to use a custom texture for the resize handle.First, create a texture for the resize handle and save it in your mod's assets folder. For example, you can create a texture named "resize_handle" and save it in the "MassChart/Textures" folder.Next, load the texture in your code and use it in the DrawWindow method. Here's how you can modify the MassChart class to load the custom texture and use it in the DrawWindow method:Add a new field for the resize handle texture:csharpCopy codeprivate Texture2D resizeHandleTexture;
+Load the texture in the Start method:csharpCopy codeprivate void Start()
+{
+    // Other code...
+    resizeHandleTexture = GameDatabase.Instance.GetTexture("MassChart/Textures/resize_handle", false);
+}
+Replace the GUI.DrawTexture(resizeHandleRect, EditorGUIUtility.IconContent("resizeTrackTex").image) line in the DrawWindow method with the following:csharpCopy codeGUI.DrawTexture(resizeHandleRect, resizeHandleTexture);
+Now your code should work without any issues related to the EditorGUIUtility class. The resize handle in your mod's window will use the custom texture you created.

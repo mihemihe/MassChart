@@ -1,0 +1,77 @@
+KSP Vessel Mass Mod.
+____________________
+
+Human: I want to develop a simple mod for KSP. while in the VAB, and as long as you have a ship loaded it will show an UI with a list containing all the parts of the vessel, sorted by part size, and the sum of all parts, which is the total vessel mass. Each entry will have the mass in Kg and the % of total mass that part is contributing.. Where shall I start ?
+ChatGPT: Creating a simple mod for Kerbal Space Program (KSP) requires some knowledge of programming and a basic understanding of the game. KSP mods are usually developed using the Unity game engine and C# programming language. To create the mod you described, follow these steps:Install Unity and Visual Studio: Start by installing the Unity game engine (https://unity.com/) and Visual Studio (https://visualstudio.microsoft.com/), as you will need both for mod development.Get familiar with KSP modding: Read up on KSP modding and understand the basics of how mods interact with the game. The KSP wiki (https://wiki.kerbalspaceprogram.com/wiki/Modding) and the KSP forums (https://forum.kerbalspaceprogram.com/) are great places to start.Create a new project in Visual Studio: Open Visual Studio and create a new C# Class Library project. This will be the foundation of your mod.Reference KSP and Unity assemblies: Add references to the necessary KSP and Unity assemblies. You will need to reference the following files:Assembly-CSharp.dll (KSP's main assembly)UnityEngine.dll (Unity's main assembly)UnityEngine.UI.dll (Unity's UI assembly)
+These files can be found in the KSP installation folder, under the KSP_Data/Managed directory.Create a class for your mod: In your project, create a new class that inherits from MonoBehaviour. This will serve as the main script for your mod. For example:csharpCopy codeusing UnityEngine;
+
+public class VesselMassMod : MonoBehaviour
+{
+    // Your code will go here
+}
+Implement the functionality: Write the code to implement the UI, part sorting, and mass calculation. You will need to use KSP's API to interact with the game objects, such as the vessel and its parts.Compile the mod: Build your project in Visual Studio, which will generate a .dll file. This is your compiled mod.Install the mod in KSP: To install your mod, create a new folder with a descriptive name (e.g., VesselMassMod) in the GameData folder of your KSP installation. Place the compiled .dll file in this new folder.Test and iterate: Launch KSP and test your mod in the game. Make any necessary changes in your code and recompile as needed.Share your mod: Once you're satisfied with your mod, you can share it with others on the KSP forums or other modding platforms like CurseForge (https://www.curseforge.com/kerbal/ksp-mods).Remember that creating a mod requires patience and persistence. You may encounter issues or bugs during development, but with determination and the help of the KSP modding community, you can create a functional and enjoyable mod. Good luck!
+Human: help me with the code
+ChatGPT: Sure, here's a basic implementation of the mod you described:csharpCopy codeusing System.Collections.Generic;
+using System.Linq;
+using UnityEngine;
+using KSP.UI.Screens;
+
+public class VesselMassMod : MonoBehaviour
+{
+    private Rect windowRect = new Rect(50, 50, 400, 500);
+    private bool windowVisible = false;
+    private Vector2 scrollPosition;
+
+    private void Start()
+    {
+        GameEvents.onEditorShipModified.Add(OnShipModified);
+    }
+
+    private void OnDestroy()
+    {
+        GameEvents.onEditorShipModified.Remove(OnShipModified);
+    }
+
+    private void OnShipModified(ShipConstruct ship)
+    {
+        windowVisible = true;
+    }
+
+    private void OnGUI()
+    {
+        if (windowVisible && HighLogic.LoadedSceneIsEditor)
+        {
+            windowRect = GUILayout.Window(GetInstanceID(), windowRect, DrawWindow, "Vessel Mass and Parts");
+        }
+    }
+
+    private void DrawWindow(int windowID)
+    {
+        ShipConstruct ship = EditorLogic.fetch.ship;
+
+        if (ship == null)
+        {
+            GUILayout.Label("No ship loaded");
+            return;
+        }
+
+        GUILayout.Label("Parts sorted by size:");
+        scrollPosition = GUILayout.BeginScrollView(scrollPosition, GUILayout.Width(380), GUILayout.Height(400));
+
+        List<Part> sortedParts = ship.Parts.OrderByDescending(p => p.mass).ToList();
+        double totalMass = sortedParts.Sum(p => p.mass);
+
+        foreach (Part part in sortedParts)
+        {
+            double partMass = part.mass;
+            double partMassPercentage = (partMass / totalMass) * 100;
+
+            GUILayout.Label($"{part.partInfo.title} - {partMass:0.00} kg ({partMassPercentage:0.00}%)");
+        }
+
+        GUILayout.EndScrollView();
+        GUILayout.Label($"Total mass: {totalMass:0.00} kg");
+        GUI.DragWindow();
+    }
+}
+This code provides a basic implementation of the mod, which shows a window in the VAB with a list of parts sorted by mass. The window will appear when you modify a vessel. You can copy this code into your VesselMassMod class in Visual Studio.Here's a brief explanation of the code:Start and OnDestroy methods register and unregister the OnShipModified event handler. This event is triggered whenever the vessel is modified in the editor.OnShipModified sets windowVisible to true, indicating that the window should be shown.OnGUI is called by Unity to draw the UI. If windowVisible is true and the scene is the editor, it draws the window using the DrawWindow method.DrawWindow is responsible for drawing the content of the window. It sorts the parts by mass and calculates the total mass of the vessel. It then displays the sorted parts, their mass, and their percentage of the total mass.Keep in mind that this is a basic example and you may want to expand it or adjust it to fit your needs. Make sure you test the mod in KSP and fix any issues that might arise. Good luck!
