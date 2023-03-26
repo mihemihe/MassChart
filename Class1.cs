@@ -1,13 +1,11 @@
 ﻿using KSP.UI.Screens;
-using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using UnityEngine;
-using KSP.UI;
-using KSP.Localization;
-using System.Reflection;
+
+using static GameEvents;
+
+
 
 namespace MassChart
 {
@@ -24,11 +22,6 @@ namespace MassChart
         private Rect windowRect = new Rect(10, 10, 400, 300);
 
         private ApplicationLauncherButton appButton; //
-
-        private const float ResizeHandleSize = 16f;
-        private Vector2 minWindowSize = new Vector2(400, 300);
-
-
 
 
         private enum SortMode
@@ -127,7 +120,10 @@ namespace MassChart
                 ConfigureStyles();
             }
 
-            windowRect = GUILayout.Window(windowID, windowRect, DrawWindow, "Vessel Mass", windowStyle);
+            windowRect = GUILayout.Window(windowID, windowRect, DrawWindow, "Vessel Mass 26/05/23 15:48", windowStyle);
+            //windowRect = new Rect(windowRect.x, windowRect.y, Mathf.Max(minWindowSize.x, windowRect.width), Mathf.Max(minWindowSize.y, windowRect.height));
+
+
         }
 
         private void DrawWindow(int id)
@@ -228,8 +224,9 @@ namespace MassChart
 
             GUILayout.EndScrollView();
             GUI.DragWindow();
-        }
 
+
+        }
 
         private void ConfigureStyles()
         {
